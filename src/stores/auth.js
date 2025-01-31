@@ -62,11 +62,17 @@ export const useAuthStore = defineStore('auth', () => {
       loading.value = true
       error.value = null
       
+      console.log('Chamando supabase.auth.signOut()')
       const { error: authError } = await supabase.auth.signOut()
-      if (authError) throw authError
+      if (authError) {
+        console.error('Erro no signOut do Supabase:', authError)
+        throw authError
+      }
 
+      console.log('Limpando dados do usuário')
       user.value = null
     } catch (err) {
+      console.error('Erro completo no logout:', err)
       error.value = err.message
       throw err
     } finally {

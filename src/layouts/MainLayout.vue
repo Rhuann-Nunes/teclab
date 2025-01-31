@@ -231,12 +231,15 @@ const toggleLeftDrawer = () => {
 
 const handleLogout = async () => {
   try {
+    console.log('Iniciando logout...')
     await authStore.logout()
+    console.log('Logout realizado com sucesso')
     router.push('/login')
   } catch (error) {
+    console.error('Erro detalhado no logout:', error)
     $q.notify({
       type: 'negative',
-      message: 'Erro ao fazer logout.'
+      message: `Erro ao fazer logout: ${error.message}`
     })
   }
 }
