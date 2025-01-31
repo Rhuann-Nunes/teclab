@@ -231,26 +231,13 @@ const toggleLeftDrawer = () => {
 
 const handleLogout = async () => {
   try {
-    console.log('Iniciando logout...')
     await authStore.logout()
-    console.log('Logout realizado com sucesso')
-    
-    // Always redirect to login, even if there was no active session
-    router.push('/login')
+    // Força recarregamento da página após o logout
+    window.location.href = '/login'
   } catch (error) {
-    console.error('Erro detalhado no logout:', error)
-    
-    // If the error is about missing session, we can still redirect
-    if (error.message === 'Auth session missing!') {
-      console.log('Sessão não encontrada, redirecionando para login')
-      router.push('/login')
-      return
-    }
-    
-    $q.notify({
-      type: 'negative',
-      message: `Erro ao fazer logout: ${error.message}`
-    })
+    console.error('Erro no logout:', error)
+    // Mesmo com erro, redireciona para login
+    window.location.href = '/login'
   }
 }
 </script> 
