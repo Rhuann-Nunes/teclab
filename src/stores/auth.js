@@ -62,24 +62,38 @@ export const useAuthStore = defineStore('auth', () => {
       loading.value = true
       error.value = null
 
-      // Primeiro, limpa o estado local
+      // First clear local state
       user.value = null
       
-      try {
-        // Tenta fazer o signOut do Supabase
-        await supabase.auth.signOut()
-      } catch (signOutError) {
-        console.log('Erro ao fazer signOut do Supabase (ignorando):', signOutError)
+      // Get current session
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (session) {
+        console.log('Sessão encontrada, realizando signOut...')
+        // Try to sign out from Supabase
+        const { error: signOutError } = await supabase.auth.signOut()
+        if (signOutError) {
+          console.error('Erro no signOut do Supabase:', signOutError)
+        }
+      } else {
+        console.log('Nenhuma sessão ativa encontrada')
       }
 
-      // Força limpeza do localStorage
-      localStorage.removeItem('sb-' + import.meta.env.VITE_SUPABASE_URL + '-auth-token')
+      // Clear any stored auth data
+      console.log('Limpando dados de autenticação do localStorage...')
+      localStorage.removeItem('teclab-auth')
+      localStorage.removeItem(`sb-${import.meta.env.VITE_SUPABASE_URL}-auth-token`)
+      
+      // Clear any other app state if needed
+      sessionStorage.clear()
       
       return true
     } catch (err) {
-      console.error('Erro completo no logout:', err)
+      console.error('Erro no logout:', err)
       error.value = err.message
-      throw err
+      // Even if there's an error, we want to clear the state
+      user.value = null
+      return true
     } finally {
       loading.value = false
     }
