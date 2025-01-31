@@ -234,9 +234,19 @@ const handleLogout = async () => {
     console.log('Iniciando logout...')
     await authStore.logout()
     console.log('Logout realizado com sucesso')
+    
+    // Always redirect to login, even if there was no active session
     router.push('/login')
   } catch (error) {
     console.error('Erro detalhado no logout:', error)
+    
+    // If the error is about missing session, we can still redirect
+    if (error.message === 'Auth session missing!') {
+      console.log('Sessão não encontrada, redirecionando para login')
+      router.push('/login')
+      return
+    }
+    
     $q.notify({
       type: 'negative',
       message: `Erro ao fazer logout: ${error.message}`

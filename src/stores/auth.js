@@ -62,15 +62,22 @@ export const useAuthStore = defineStore('auth', () => {
       loading.value = true
       error.value = null
       
-      console.log('Chamando supabase.auth.signOut()')
-      const { error: authError } = await supabase.auth.signOut()
-      if (authError) {
-        console.error('Erro no signOut do Supabase:', authError)
-        throw authError
+      console.log('Verificando sessão atual...')
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      // Only attempt signOut if there's an active session
+      if (session) {
+        console.log('Sessão ativa encontrada, realizando signOut')
+        const { error: authError } = await supabase.auth.signOut()
+        if (authError) throw authError
+      } else {
+        console.log('Nenhuma sessão ativa encontrada')
       }
 
       console.log('Limpando dados do usuário')
       user.value = null
+      
+      return true
     } catch (err) {
       console.error('Erro completo no logout:', err)
       error.value = err.message
