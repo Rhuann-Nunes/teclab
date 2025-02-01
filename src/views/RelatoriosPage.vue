@@ -94,10 +94,14 @@ const columns = [
   }
 ]
 
-// Renomear a computed property para refletir que agora inclui ambos os tipos de ensaio
+// Renomear a computed property para refletir que agora inclui todos os tipos de ensaio
 const hasEnsaiosSelecionados = computed(() => {
   return selectedRows.value.some(row => 
-    (row.tipo === 'Granulometria' || row.tipo === 'Limites de Atterberg') && 
+    (row.tipo === 'Granulometria' || 
+     row.tipo === 'Limites de Atterberg' || 
+     row.tipo === 'Compactação' ||
+     row.tipo === 'CBR e Expansão' ||
+     row.tipo === 'Densidade "In Situ"') && 
     row.quantidade > 0
   )
 })
@@ -105,6 +109,9 @@ const hasEnsaiosSelecionados = computed(() => {
 // Adicionar constantes no topo do script
 const apiUrlGranulometria = 'https://api-htmlppdf.vercel.app/api/granulometria'
 const apiUrlAtterberg = 'https://api-htmlppdf.vercel.app/api/atterberg'
+const apiUrlCompactacao = 'https://api-htmlppdf.vercel.app/api/compactacao'
+const apiUrlCbr = 'https://api-htmlppdf.vercel.app/api/cbr'
+const apiUrlDensidadeInsitu = 'https://api-htmlppdf.vercel.app/api/densidade-insitu'
 
 // Adicionar as constantes das cápsulas no topo do script
 const capsulasLL = {
@@ -145,9 +152,12 @@ const gerarRelatorioGranulometria = async () => {
     // Verificar quais tipos de ensaios estão selecionados
     const granulometriaSelecionada = selectedRows.value.some(row => row.tipo === 'Granulometria' && row.quantidade > 0)
     const limitesSelecionados = selectedRows.value.some(row => row.tipo === 'Limites de Atterberg' && row.quantidade > 0)
+    const compactacaoSelecionada = selectedRows.value.some(row => row.tipo === 'Compactação' && row.quantidade > 0)
+    const cbrSelecionado = selectedRows.value.some(row => row.tipo === 'CBR e Expansão' && row.quantidade > 0)
+    const densidadeInsituSelecionada = selectedRows.value.some(row => row.tipo === 'Densidade "In Situ"' && row.quantidade > 0)
 
     // Se nenhum ensaio estiver selecionado, retornar
-    if (!granulometriaSelecionada && !limitesSelecionados) return
+    if (!granulometriaSelecionada && !limitesSelecionados && !compactacaoSelecionada && !cbrSelecionado && !densidadeInsituSelecionada) return
 
     loading.value = true
     
@@ -205,10 +215,92 @@ const gerarRelatorioGranulometria = async () => {
       promises.push(Promise.resolve({ data: [] }))
     }
 
-    const [granulometriaResponse, limitesResponse] = await Promise.all(promises)
+    // Adicionar promise de compactação se selecionada
+    if (compactacaoSelecionada) {
+      promises.push(
+        supabase
+          .from('compactacao_entradas')
+          .select(`
+            *,
+            ambiente:ambiente_id (
+              id,
+              estaca_inicial,
+              estaca_final,
+              localizacao:localizacao_id (
+                nome
+              )
+            ),
+            pontos:compactacao_pontos(*),
+            resultados:compactacao_resultados(*),
+            resultados_finais:compactacao_resultados_finais(*)
+          `)
+          .eq('ambiente_id.obra_id', selectedObra.value.id)
+          .gte('data_ensaio', medicaoAtual.value.data_inicio)
+          .lte('data_ensaio', medicaoAtual.value.data_fim)
+      )
+    } else {
+      promises.push(Promise.resolve({ data: [] }))
+    }
+
+    // Adicionar promise de CBR se selecionado
+    if (cbrSelecionado) {
+      promises.push(
+        supabase
+          .from('cbr_entradas')
+          .select(`
+            *,
+            ambiente:ambiente_id (
+              id,
+              estaca_inicial,
+              estaca_final,
+              localizacao:localizacao_id (
+                nome
+              )
+            ),
+            leituras_expansao:cbr_leituras_expansao(*),
+            leituras_penetracao:cbr_leituras_penetracao(*),
+            resultados:cbr_resultados(*)
+          `)
+          .eq('ambiente_id.obra_id', selectedObra.value.id)
+          .gte('data_ensaio', medicaoAtual.value.data_inicio)
+          .lte('data_ensaio', medicaoAtual.value.data_fim)
+      )
+    } else {
+      promises.push(Promise.resolve({ data: [] }))
+    }
+
+    // Adicionar promise de densidade in situ se selecionada
+    if (densidadeInsituSelecionada) {
+      promises.push(
+        supabase
+          .from('densidade_insitu_entradas')
+          .select(`
+            *,
+            ambiente:ambiente_id (
+              id,
+              estaca_inicial,
+              estaca_final,
+              localizacao:localizacao_id (
+                nome
+              )
+            ),
+            furos:densidade_insitu_furos(*)
+          `)
+          .eq('ambiente_id.obra_id', selectedObra.value.id)
+          .gte('data_ensaio', medicaoAtual.value.data_inicio)
+          .lte('data_ensaio', medicaoAtual.value.data_fim)
+      )
+    } else {
+      promises.push(Promise.resolve({ data: [] }))
+    }
+
+    const [granulometriaResponse, limitesResponse, compactacaoResponse, cbrResponse, densidadeInsituResponse] = await Promise.all(promises)
 
     if (granulometriaResponse.error) throw granulometriaResponse.error
     if (limitesResponse.error) throw limitesResponse.error
+    if (compactacaoResponse.error) throw compactacaoResponse.error
+    if (cbrResponse.error) throw cbrResponse.error
+    if (densidadeInsituResponse.error) throw densidadeInsituResponse.error
 
     // Formatar dados de granulometria se houver
     const dadosGranulometria = granulometriaSelecionada ? granulometriaResponse.data.map(ensaio => ({
@@ -422,6 +514,191 @@ const gerarRelatorioGranulometria = async () => {
       }
     }) : []
 
+    // Formatar dados de compactação se houver
+    const dadosCompactacao = compactacaoSelecionada ? compactacaoResponse.data.map(ensaio => ({
+      // Dados gerais
+      rodovia: selectedObra.value.nome,
+      trecho: ensaio.ambiente.localizacao.nome,
+      sub_trecho: `SEGMENTO ${ensaio.ambiente.estaca_inicial} - ${ensaio.ambiente.estaca_final}`,
+      material: ensaio.nome_amostra,
+      data_ensaio: ensaio.data_ensaio,
+      medicao: medicaoAtual.value ? `Medição Nº ${medicaoAtual.value.numero}` : '',
+
+      // Método
+      metodo: {
+        tipo: ensaio.metodo_compactacao,
+        golpes_por_camada: ensaio.golpes_por_camada,
+        numero_camadas: ensaio.numero_camadas
+      },
+
+      // Umidade higroscópica
+      umidade_higroscopica: {
+        capsula_1: {
+          numero: ensaio.capsula_id_1,
+          peso_capsula: ensaio.peso_capsula_1,
+          peso_capsula_solo_umido: ensaio.peso_bruto_umido_1,
+          peso_capsula_solo_seco: ensaio.peso_bruto_seco_1,
+          peso_agua: ensaio.peso_agua_1,
+          peso_solo_seco: ensaio.peso_solo_seco_1,
+          umidade: ensaio.umidade_1
+        },
+        capsula_2: {
+          numero: ensaio.capsula_id_2,
+          peso_capsula: ensaio.peso_capsula_2,
+          peso_capsula_solo_umido: ensaio.peso_bruto_umido_2,
+          peso_capsula_solo_seco: ensaio.peso_bruto_seco_2,
+          peso_agua: ensaio.peso_agua_2,
+          peso_solo_seco: ensaio.peso_solo_seco_2,
+          umidade: ensaio.umidade_2
+        },
+        umidade_media: ensaio.umidade_media
+      },
+
+      // Amostra total
+      amostra_total: {
+        peso_total: ensaio.peso_total_amostra,
+        peso_solo_seco: ensaio.peso_solo_seco_amostra,
+        peso_agua: ensaio.peso_agua_amostra,
+        intervalo_percentual: ensaio.intervalo_percentual
+      },
+
+      // Pontos
+      pontos: ensaio.pontos.map(ponto => ({
+        ponto: ponto.ponto,
+        cilindro: {
+          numero: ponto.cilindro_id,
+          massa_molde: ponto.massa_molde,
+          volume_molde: ponto.volume_molde
+        },
+        peso_bruto_umido: ponto.peso_bruto_umido,
+        peso_solo_umido: ponto.peso_solo_umido,
+        agua_adicionada: ponto.agua_adicionada,
+        agua_total: ponto.agua_total,
+        umidade_media: ponto.umidade_media,
+        densidade_solo_umido: ponto.densidade_solo_umido,
+        densidade_solo_seco: ponto.densidade_solo_seco
+      })),
+
+      // Resultados
+      resultados: ensaio.resultados.map(resultado => ({
+        ponto: resultado.ponto,
+        teor_umidade: resultado.teor_umidade,
+        massa_especifica_aparente_umida: resultado.massa_especifica_aparente_umida,
+        massa_especifica_aparente_seca: resultado.massa_especifica_aparente_seca
+      })),
+
+      // Resultados finais
+      resultados_finais: {
+        umidade_otima: ensaio.resultados_finais[0].umidade_otima,
+        massa_especifica_aparente_seca_maxima: ensaio.resultados_finais[0].massa_especifica_aparente_seca_maxima
+      },
+
+      observacoes: ensaio.observacoes
+    })) : []
+
+    // Formatar dados de CBR se houver
+    const dadosCbr = cbrSelecionado ? cbrResponse.data.map(ensaio => ({
+      // Dados gerais
+      rodovia: selectedObra.value.nome,
+      trecho: ensaio.ambiente.localizacao.nome,
+      sub_trecho: `SEGMENTO ${ensaio.ambiente.estaca_inicial} - ${ensaio.ambiente.estaca_final}`,
+      material: ensaio.nome_amostra,
+      data_ensaio: ensaio.data_ensaio,
+      medicao: medicaoAtual.value ? `Medição Nº ${medicaoAtual.value.numero}` : '',
+      numero_golpes: ensaio.numero_golpes,
+      altura_cilindro: ensaio.altura_cilindro,
+      constante_prensa: ensaio.constante_prensa,
+
+      // Dados de expansão
+      expansao: ensaio.resultados.map(resultado => ({
+        cilindro: resultado.cilindro_num,
+        leituras: ensaio.leituras_expansao
+          .filter(l => l.compactacao_ponto_id === resultado.compactacao_ponto_id)
+          .sort((a, b) => a.ordem - b.ordem)
+          .map(leitura => ({
+            data: leitura.data,
+            hora: leitura.hora,
+            leitura: leitura.leitura_extensometro
+          })),
+        diferenca: resultado.diferenca_expansao,
+        expansao_percentual: resultado.expansao_percentual
+      })),
+
+      // Dados dos cilindros
+      cilindros: ensaio.resultados.map(resultado => ({
+        numero: resultado.cilindro_num,
+        penetracao: {
+          leituras: ensaio.leituras_penetracao
+            .filter(l => l.compactacao_ponto_id === resultado.compactacao_ponto_id)
+            .sort((a, b) => a.ordem - b.ordem)
+            .map(leitura => ({
+              tempo: leitura.tempo_penetracao,
+              penetracao: leitura.penetracao_mm,
+              leitura: leitura.leitura_extensometro,
+              pressao: leitura.pressao_calculada,
+              pressao_padrao: leitura.pressao_padrao,
+              isc: leitura.isc,
+              isc_referencia: leitura.isc_referencia
+            }))
+        },
+        resultados: {
+          isc_2_54: resultado.isc_2_54,
+          isc_5_08: resultado.isc_5_08,
+          isc_escolhido: resultado.isc_escolhido,
+          massa_especifica_aparente_seca: resultado.massa_especifica_aparente_seca,
+          teor_umidade: resultado.teor_umidade
+        }
+      })),
+
+      observacoes: ensaio.observacoes
+    })) : []
+
+    // Formatar dados de densidade in situ se houver
+    const dadosDensidadeInsitu = densidadeInsituSelecionada ? densidadeInsituResponse.data.map(ensaio => ({
+      // Dados gerais
+      rodovia: selectedObra.value.nome,
+      trecho: ensaio.ambiente.localizacao.nome,
+      sub_trecho: `SEGMENTO ${ensaio.ambiente.estaca_inicial} - ${ensaio.ambiente.estaca_final}`,
+      material: ensaio.nome_amostra,
+      data_ensaio: ensaio.data_ensaio,
+      medicao: medicaoAtual.value ? `Medição Nº ${medicaoAtual.value.numero}` : '',
+
+      // Dados dos furos
+      furos: ensaio.furos.map(furo => ({
+        estaca: furo.estaca,
+        posicao: furo.lado,
+        data: new Date(ensaio.data_ensaio).toLocaleDateString('pt-BR'),
+        camada: 'CAMADA DE ATERRO',
+        profundidade_furo: furo.profundidade,
+        numero_frasco: 1, // Valor padrão
+        peso_frasco: {
+          antes: furo.peso_frasco_antes,
+          depois: furo.peso_frasco_depois
+        },
+        peso_areia: {
+          cone: furo.peso_areia_cone,
+          furo: furo.peso_areia_furo
+        },
+        densidade_areia: furo.densidade_areia,
+        volume_furo: furo.volume_furo,
+        solo_escavado: {
+          peso_umido_tara: furo.peso_solo_umido_tara,
+          tara: furo.tara,
+          peso_solo_umido: furo.peso_solo_umido
+        },
+        compactacao: {
+          umidade_speedy: furo.teor_umidade,
+          densidade_aparente_umida: furo.densidade_aparente_umida,
+          densidade_aparente_seca: furo.densidade_aparente_seca,
+          densidade_maxima_laboratorio: furo.densidade_maxima_laboratorio,
+          umidade_otima: furo.umidade_otima_laboratorio,
+          grau_compactacao: furo.grau_compactacao
+        }
+      })),
+
+      observacoes: ensaio.observacoes
+    })) : []
+
     // Remover o log dos dados de limites e adicionar chamada API
     if (limitesSelecionados) {
       fetch(apiUrlAtterberg, {
@@ -496,6 +773,123 @@ const gerarRelatorioGranulometria = async () => {
         $q.notify({
           type: 'negative',
           message: 'Erro ao gerar relatório de Granulometria: ' + (error.message || JSON.stringify(error))
+        })
+      })
+    }
+
+    // Fazer requisição para a API de compactação se selecionada
+    if (compactacaoSelecionada) {
+      fetch(apiUrlCompactacao, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dadosCompactacao)
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => Promise.reject(err))
+        }
+        return response.blob()
+      })
+      .then(blob => {
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `compactacao_${medicaoAtual.value.numero}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+
+        $q.notify({
+          type: 'positive',
+          message: 'Relatório de Compactação gerado com sucesso!'
+        })
+      })
+      .catch(error => {
+        console.error('Erro ao gerar relatório de Compactação:', error)
+        $q.notify({
+          type: 'negative',
+          message: 'Erro ao gerar relatório de Compactação: ' + (error.message || JSON.stringify(error))
+        })
+      })
+    }
+
+    // Fazer requisição para a API de CBR se selecionado
+    if (cbrSelecionado) {
+      fetch(apiUrlCbr, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dadosCbr)
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => Promise.reject(err))
+        }
+        return response.blob()
+      })
+      .then(blob => {
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `cbr_${medicaoAtual.value.numero}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+
+        $q.notify({
+          type: 'positive',
+          message: 'Relatório de CBR gerado com sucesso!'
+        })
+      })
+      .catch(error => {
+        console.error('Erro ao gerar relatório de CBR:', error)
+        $q.notify({
+          type: 'negative',
+          message: 'Erro ao gerar relatório de CBR: ' + (error.message || JSON.stringify(error))
+        })
+      })
+    }
+
+    // Fazer requisição para a API de densidade in situ se selecionada
+    if (densidadeInsituSelecionada) {
+      fetch(apiUrlDensidadeInsitu, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dadosDensidadeInsitu)
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => Promise.reject(err))
+        }
+        return response.blob()
+      })
+      .then(blob => {
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `densidade-insitu_${medicaoAtual.value.numero}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+
+        $q.notify({
+          type: 'positive',
+          message: 'Relatório de Densidade In Situ gerado com sucesso!'
+        })
+      })
+      .catch(error => {
+        console.error('Erro ao gerar relatório de Densidade In Situ:', error)
+        $q.notify({
+          type: 'negative',
+          message: 'Erro ao gerar relatório de Densidade In Situ: ' + (error.message || JSON.stringify(error))
         })
       })
     }
@@ -578,35 +972,36 @@ const buscarResumoEnsaios = async (obraId, medicao) => {
 
       // Compactação
       supabase
-        .from('compactacao_resultados')
+        .from('compactacao_entradas')
         .select(`
           id,
-          compactacao_id (
-            ambiente_id (
-              estaca_inicial,
-              estaca_final
-            )
+          data_ensaio,
+          ambiente_id (
+            estaca_inicial,
+            estaca_final
           )
         `)
-        .filter('compactacao_id.ambiente_id.obra_id', 'eq', obraId)
-        .gte('created_at', medicao.data_inicio)
-        .lte('created_at', medicao.data_fim),
+        .eq('ambiente_id.obra_id', obraId)
+        .gte('data_ensaio', medicao.data_inicio)
+        .lte('data_ensaio', medicao.data_fim),
 
       // CBR
       supabase
-        .from('cbr_resultados')
+        .from('cbr_entradas')
         .select(`
           id,
-          cbr_entrada_id (
-            ambiente_id (
-              estaca_inicial,
-              estaca_final
-            )
+          data_ensaio,
+          ambiente:ambiente_id (
+            estaca_inicial,
+            estaca_final
+          ),
+          resultados:cbr_resultados (
+            id
           )
         `)
-        .filter('cbr_entrada_id.ambiente_id.obra_id', 'eq', obraId)
-        .gte('created_at', medicao.data_inicio)
-        .lte('created_at', medicao.data_fim),
+        .eq('ambiente_id.obra_id', obraId)
+        .gte('data_ensaio', medicao.data_inicio)
+        .lte('data_ensaio', medicao.data_fim),
 
       // Densidade In Situ
       supabase
@@ -654,16 +1049,16 @@ const buscarResumoEnsaios = async (obraId, medicao) => {
         tipo: 'Compactação',
         quantidade: compactacao.data?.length || 0,
         disciplina: 'Terraplenagem',
-        trecho: compactacao.data?.[0]?.compactacao_id?.ambiente_id
-          ? formatarTrecho(compactacao.data[0].compactacao_id.ambiente_id)
+        trecho: compactacao.data?.[0]?.ambiente_id
+          ? formatarTrecho(compactacao.data[0].ambiente_id)
           : '-'
       },
       {
         tipo: 'CBR e Expansão',
         quantidade: cbr.data?.length || 0,
         disciplina: 'Terraplenagem',
-        trecho: cbr.data?.[0]?.cbr_entrada_id?.ambiente_id
-          ? formatarTrecho(cbr.data[0].cbr_entrada_id.ambiente_id)
+        trecho: cbr.data?.[0]?.ambiente
+          ? formatarTrecho(cbr.data[0].ambiente)
           : '-'
       },
       {

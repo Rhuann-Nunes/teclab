@@ -615,7 +615,10 @@ const salvarEnsaio = async () => {
         isc_escolhido: Math.max(
           form.value.leituras_penetracao[cilindroIndex].find(l => l.penetracao_mm === 2.54)?.isc || 0,
           form.value.leituras_penetracao[cilindroIndex].find(l => l.penetracao_mm === 5.08)?.isc || 0
-        )
+        ),
+        cilindro_num: cilindro.cilindro_id.toString(),
+        massa_especifica_aparente_seca: cilindro.densidade_solo_seco,
+        teor_umidade: cilindro.teor_umidade
       }
     })
 
