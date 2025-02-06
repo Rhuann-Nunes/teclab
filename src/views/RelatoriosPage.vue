@@ -46,7 +46,12 @@
           v-model:selected="selectedRows"
         >
           <template v-slot:loading>
-            <q-inner-loading showing color="primary" />
+            <q-inner-loading showing color="primary">
+              <div class="column items-center">
+                <q-spinner size="50px" color="primary" />
+                <div class="q-mt-sm text-grey-7 text-bold text-h6">{{ progress }}%</div>
+              </div>
+            </q-inner-loading>
           </template>
         </q-table>
       </q-card-section>
@@ -64,6 +69,7 @@ const $q = useQuasar()
 const { selectedObra } = useSelectedObra()
 const medicaoAtual = ref(null)
 const loading = ref(false)
+const progress = ref(0)
 const resumoEnsaios = ref([])
 const selectedRows = ref([])
 
@@ -147,6 +153,9 @@ const calcularUmidade = (ponto, tipo) => {
   return Number(umidade.toFixed(1))
 }
 
+// Função simples de delay
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+
 const gerarRelatorioGranulometria = async () => {
   try {
     // Verificar quais tipos de ensaios estão selecionados
@@ -160,147 +169,150 @@ const gerarRelatorioGranulometria = async () => {
     if (!granulometriaSelecionada && !limitesSelecionados && !compactacaoSelecionada && !cbrSelecionado && !densidadeInsituSelecionada) return
 
     loading.value = true
+    progress.value = 0
     
-    // Array para armazenar as promises de busca
-    const promises = []
+    // Calcular total de etapas para o progresso
+    const totalEtapas = [
+      granulometriaSelecionada,
+      limitesSelecionados,
+      compactacaoSelecionada,
+      cbrSelecionado,
+      densidadeInsituSelecionada
+    ].filter(Boolean).length * 2 // Multiplicar por 2 pois cada tipo tem busca e geração de PDF
+    
+    let etapaAtual = 0
+    const atualizarProgresso = () => {
+      etapaAtual++
+      progress.value = Math.round((etapaAtual / totalEtapas) * 100)
+    }
 
-    // Adicionar promise de granulometria se selecionada
+    // Variáveis para armazenar as respostas
+    let granulometriaResponse = { data: [] },
+        limitesResponse = { data: [] },
+        compactacaoResponse = { data: [] },
+        cbrResponse = { data: [] },
+        densidadeInsituResponse = { data: [] }
+
+    // Processamento sequencial com pequenos delays
     if (granulometriaSelecionada) {
-      promises.push(
-        supabase
-          .from('granulometria_entradas')
-          .select(`
-            *,
-            ambiente:ambiente_id (
-              id,
-              estaca_inicial,
-              estaca_final,
-              localizacao:localizacao_id (
-                nome
-              )
-            ),
-            resultado:granulometria_resultados!id(*)
-          `)
-          .eq('ambiente_id.obra_id', selectedObra.value.id)
-          .gte('created_at', medicaoAtual.value.data_inicio)
-          .lte('created_at', medicaoAtual.value.data_fim)
-      )
-    } else {
-      promises.push(Promise.resolve({ data: [] }))
+      granulometriaResponse = await supabase
+        .from('granulometria_entradas')
+        .select(`
+          *,
+          ambiente:ambiente_id (
+            id,
+            estaca_inicial,
+            estaca_final,
+            localizacao:localizacao_id (
+              nome
+            )
+          ),
+          resultado:granulometria_resultados!id(*)
+        `)
+        .eq('ambiente_id.obra_id', selectedObra.value.id)
+        .gte('created_at', medicaoAtual.value.data_inicio)
+        .lte('created_at', medicaoAtual.value.data_fim)
+      if (granulometriaResponse.error) throw granulometriaResponse.error
+      atualizarProgresso()
+      await delay(300)
     }
 
-    // Adicionar promise de limites se selecionados
     if (limitesSelecionados) {
-      promises.push(
-        supabase
-          .from('limite_consistencia_entradas')
-          .select(`
-            *,
-            ambiente:ambiente_id (
-              id,
-              estaca_inicial,
-              estaca_final,
-              localizacao:localizacao_id (
-                nome
-              )
-            ),
-            resultado:limite_consistencia_resultados!id(*),
-            dados_especificos
-          `)
-          .eq('ambiente_id.obra_id', selectedObra.value.id)
-          .gte('created_at', medicaoAtual.value.data_inicio)
-          .lte('created_at', medicaoAtual.value.data_fim)
-      )
-    } else {
-      promises.push(Promise.resolve({ data: [] }))
+      limitesResponse = await supabase
+        .from('limite_consistencia_entradas')
+        .select(`
+          *,
+          ambiente:ambiente_id (
+            id,
+            estaca_inicial,
+            estaca_final,
+            localizacao:localizacao_id (
+              nome
+            )
+          ),
+          resultado:limite_consistencia_resultados!id(*),
+          dados_especificos
+        `)
+        .eq('ambiente_id.obra_id', selectedObra.value.id)
+        .gte('created_at', medicaoAtual.value.data_inicio)
+        .lte('created_at', medicaoAtual.value.data_fim)
+      if (limitesResponse.error) throw limitesResponse.error
+      atualizarProgresso()
+      await delay(300)
     }
 
-    // Adicionar promise de compactação se selecionada
     if (compactacaoSelecionada) {
-      promises.push(
-        supabase
-          .from('compactacao_entradas')
-          .select(`
-            *,
-            ambiente:ambiente_id (
-              id,
-              estaca_inicial,
-              estaca_final,
-              localizacao:localizacao_id (
-                nome
-              )
-            ),
-            pontos:compactacao_pontos(*),
-            resultados:compactacao_resultados(*),
-            resultados_finais:compactacao_resultados_finais(*)
-          `)
-          .eq('ambiente_id.obra_id', selectedObra.value.id)
-          .gte('data_ensaio', medicaoAtual.value.data_inicio)
-          .lte('data_ensaio', medicaoAtual.value.data_fim)
-      )
-    } else {
-      promises.push(Promise.resolve({ data: [] }))
+      compactacaoResponse = await supabase
+        .from('compactacao_entradas')
+        .select(`
+          *,
+          ambiente:ambiente_id (
+            id,
+            estaca_inicial,
+            estaca_final,
+            localizacao:localizacao_id (
+              nome
+            )
+          ),
+          pontos:compactacao_pontos(*),
+          resultados:compactacao_resultados(*),
+          resultados_finais:compactacao_resultados_finais(*)
+        `)
+        .eq('ambiente_id.obra_id', selectedObra.value.id)
+        .gte('data_ensaio', medicaoAtual.value.data_inicio)
+        .lte('data_ensaio', medicaoAtual.value.data_fim)
+      if (compactacaoResponse.error) throw compactacaoResponse.error
+      atualizarProgresso()
+      await delay(300)
     }
 
-    // Adicionar promise de CBR se selecionado
     if (cbrSelecionado) {
-      promises.push(
-        supabase
-          .from('cbr_entradas')
-          .select(`
-            *,
-            ambiente:ambiente_id (
-              id,
-              estaca_inicial,
-              estaca_final,
-              localizacao:localizacao_id (
-                nome
-              )
-            ),
-            leituras_expansao:cbr_leituras_expansao(*),
-            leituras_penetracao:cbr_leituras_penetracao(*),
-            resultados:cbr_resultados(*)
-          `)
-          .eq('ambiente_id.obra_id', selectedObra.value.id)
-          .gte('data_ensaio', medicaoAtual.value.data_inicio)
-          .lte('data_ensaio', medicaoAtual.value.data_fim)
-      )
-    } else {
-      promises.push(Promise.resolve({ data: [] }))
+      cbrResponse = await supabase
+        .from('cbr_entradas')
+        .select(`
+          *,
+          ambiente:ambiente_id (
+            id,
+            estaca_inicial,
+            estaca_final,
+            localizacao:localizacao_id (
+              nome
+            )
+          ),
+          leituras_expansao:cbr_leituras_expansao(*),
+          leituras_penetracao:cbr_leituras_penetracao(*),
+          resultados:cbr_resultados(*)
+        `)
+        .eq('ambiente_id.obra_id', selectedObra.value.id)
+        .gte('data_ensaio', medicaoAtual.value.data_inicio)
+        .lte('data_ensaio', medicaoAtual.value.data_fim)
+      if (cbrResponse.error) throw cbrResponse.error
+      atualizarProgresso()
+      await delay(300)
     }
 
-    // Adicionar promise de densidade in situ se selecionada
     if (densidadeInsituSelecionada) {
-      promises.push(
-        supabase
-          .from('densidade_insitu_entradas')
-          .select(`
-            *,
-            ambiente:ambiente_id (
-              id,
-              estaca_inicial,
-              estaca_final,
-              localizacao:localizacao_id (
-                nome
-              )
-            ),
-            furos:densidade_insitu_furos(*)
-          `)
-          .eq('ambiente_id.obra_id', selectedObra.value.id)
-          .gte('data_ensaio', medicaoAtual.value.data_inicio)
-          .lte('data_ensaio', medicaoAtual.value.data_fim)
-      )
-    } else {
-      promises.push(Promise.resolve({ data: [] }))
+      densidadeInsituResponse = await supabase
+        .from('densidade_insitu_entradas')
+        .select(`
+          *,
+          ambiente:ambiente_id (
+            id,
+            estaca_inicial,
+            estaca_final,
+            localizacao:localizacao_id (
+              nome
+            )
+          ),
+          furos:densidade_insitu_furos(*)
+        `)
+        .eq('ambiente_id.obra_id', selectedObra.value.id)
+        .gte('data_ensaio', medicaoAtual.value.data_inicio)
+        .lte('data_ensaio', medicaoAtual.value.data_fim)
+      if (densidadeInsituResponse.error) throw densidadeInsituResponse.error
+      atualizarProgresso()
+      await delay(300)
     }
-
-    const [granulometriaResponse, limitesResponse, compactacaoResponse, cbrResponse, densidadeInsituResponse] = await Promise.all(promises)
-
-    if (granulometriaResponse.error) throw granulometriaResponse.error
-    if (limitesResponse.error) throw limitesResponse.error
-    if (compactacaoResponse.error) throw compactacaoResponse.error
-    if (cbrResponse.error) throw cbrResponse.error
-    if (densidadeInsituResponse.error) throw densidadeInsituResponse.error
 
     // Formatar dados de granulometria se houver
     const dadosGranulometria = granulometriaSelecionada ? granulometriaResponse.data.map(ensaio => ({
@@ -699,61 +711,21 @@ const gerarRelatorioGranulometria = async () => {
       observacoes: ensaio.observacoes
     })) : []
 
-    // Remover o log dos dados de limites e adicionar chamada API
-    if (limitesSelecionados) {
-      fetch(apiUrlAtterberg, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dadosLimites)
-      })
-      .then(response => {
-        if (!response.ok) {
-          return response.json().then(err => Promise.reject(err))
-        }
-        return response.blob()
-      })
-      .then(blob => {
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `limites-atterberg_${medicaoAtual.value.numero}.pdf`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        window.URL.revokeObjectURL(url)
-
-        $q.notify({
-          type: 'positive',
-          message: 'Relatório de Limites de Atterberg gerado com sucesso!'
+    // Processar cada relatório sequencialmente
+    try {
+      if (granulometriaSelecionada && dadosGranulometria.length > 0) {
+        const response = await fetch(apiUrlGranulometria, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dadosGranulometria)
         })
-      })
-      .catch(error => {
-        console.error('Erro ao gerar relatório de Limites:', error)
-        $q.notify({
-          type: 'negative',
-          message: 'Erro ao gerar relatório de Limites: ' + (error.message || JSON.stringify(error))
-        })
-      })
-    }
-
-    // Fazer requisição para a API de granulometria se selecionada
-    if (granulometriaSelecionada) {
-      fetch(apiUrlGranulometria, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dadosGranulometria)
-      })
-      .then(response => {
+        
         if (!response.ok) {
-          return response.json().then(err => Promise.reject(err))
+          const error = await response.json()
+          throw error
         }
-        return response.blob()
-      })
-      .then(blob => {
+        
+        const blob = await response.blob()
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
@@ -762,37 +734,60 @@ const gerarRelatorioGranulometria = async () => {
         a.click()
         document.body.removeChild(a)
         window.URL.revokeObjectURL(url)
-
+        
         $q.notify({
           type: 'positive',
           message: 'Relatório de Granulometria gerado com sucesso!'
         })
-      })
-      .catch(error => {
-        console.error('Erro ao gerar relatório de Granulometria:', error)
-        $q.notify({
-          type: 'negative',
-          message: 'Erro ao gerar relatório de Granulometria: ' + (error.message || JSON.stringify(error))
-        })
-      })
-    }
+        
+        atualizarProgresso()
+        await delay(300)
+      }
 
-    // Fazer requisição para a API de compactação se selecionada
-    if (compactacaoSelecionada) {
-      fetch(apiUrlCompactacao, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dadosCompactacao)
-      })
-      .then(response => {
+      if (limitesSelecionados && dadosLimites.length > 0) {
+        const response = await fetch(apiUrlAtterberg, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dadosLimites)
+        })
+        
         if (!response.ok) {
-          return response.json().then(err => Promise.reject(err))
+          const error = await response.json()
+          throw error
         }
-        return response.blob()
-      })
-      .then(blob => {
+        
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `limites-atterberg_${medicaoAtual.value.numero}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+        
+        $q.notify({
+          type: 'positive',
+          message: 'Relatório de Limites de Atterberg gerado com sucesso!'
+        })
+        
+        atualizarProgresso()
+        await delay(300)
+      }
+
+      if (compactacaoSelecionada && dadosCompactacao.length > 0) {
+        const response = await fetch(apiUrlCompactacao, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dadosCompactacao)
+        })
+        
+        if (!response.ok) {
+          const error = await response.json()
+          throw error
+        }
+        
+        const blob = await response.blob()
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
@@ -801,37 +796,29 @@ const gerarRelatorioGranulometria = async () => {
         a.click()
         document.body.removeChild(a)
         window.URL.revokeObjectURL(url)
-
+        
         $q.notify({
           type: 'positive',
           message: 'Relatório de Compactação gerado com sucesso!'
         })
-      })
-      .catch(error => {
-        console.error('Erro ao gerar relatório de Compactação:', error)
-        $q.notify({
-          type: 'negative',
-          message: 'Erro ao gerar relatório de Compactação: ' + (error.message || JSON.stringify(error))
-        })
-      })
-    }
+        
+        atualizarProgresso()
+        await delay(300)
+      }
 
-    // Fazer requisição para a API de CBR se selecionado
-    if (cbrSelecionado) {
-      fetch(apiUrlCbr, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dadosCbr)
-      })
-      .then(response => {
+      if (cbrSelecionado && dadosCbr.length > 0) {
+        const response = await fetch(apiUrlCbr, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dadosCbr)
+        })
+        
         if (!response.ok) {
-          return response.json().then(err => Promise.reject(err))
+          const error = await response.json()
+          throw error
         }
-        return response.blob()
-      })
-      .then(blob => {
+        
+        const blob = await response.blob()
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
@@ -840,37 +827,29 @@ const gerarRelatorioGranulometria = async () => {
         a.click()
         document.body.removeChild(a)
         window.URL.revokeObjectURL(url)
-
+        
         $q.notify({
           type: 'positive',
           message: 'Relatório de CBR gerado com sucesso!'
         })
-      })
-      .catch(error => {
-        console.error('Erro ao gerar relatório de CBR:', error)
-        $q.notify({
-          type: 'negative',
-          message: 'Erro ao gerar relatório de CBR: ' + (error.message || JSON.stringify(error))
-        })
-      })
-    }
+        
+        atualizarProgresso()
+        await delay(300)
+      }
 
-    // Fazer requisição para a API de densidade in situ se selecionada
-    if (densidadeInsituSelecionada) {
-      fetch(apiUrlDensidadeInsitu, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dadosDensidadeInsitu)
-      })
-      .then(response => {
+      if (densidadeInsituSelecionada && dadosDensidadeInsitu.length > 0) {
+        const response = await fetch(apiUrlDensidadeInsitu, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dadosDensidadeInsitu)
+        })
+        
         if (!response.ok) {
-          return response.json().then(err => Promise.reject(err))
+          const error = await response.json()
+          throw error
         }
-        return response.blob()
-      })
-      .then(blob => {
+        
+        const blob = await response.blob()
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
@@ -879,18 +858,19 @@ const gerarRelatorioGranulometria = async () => {
         a.click()
         document.body.removeChild(a)
         window.URL.revokeObjectURL(url)
-
+        
         $q.notify({
           type: 'positive',
           message: 'Relatório de Densidade In Situ gerado com sucesso!'
         })
-      })
-      .catch(error => {
-        console.error('Erro ao gerar relatório de Densidade In Situ:', error)
-        $q.notify({
-          type: 'negative',
-          message: 'Erro ao gerar relatório de Densidade In Situ: ' + (error.message || JSON.stringify(error))
-        })
+        
+        atualizarProgresso()
+      }
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error)
+      $q.notify({
+        type: 'negative',
+        message: 'Erro ao gerar PDF: ' + (error.message || JSON.stringify(error))
       })
     }
   } catch (error) {
@@ -901,6 +881,7 @@ const gerarRelatorioGranulometria = async () => {
     })
   } finally {
     loading.value = false
+    progress.value = 0
   }
 }
 

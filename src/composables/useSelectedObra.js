@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -9,10 +9,16 @@ export function useSelectedObra() {
 
   const loadSelectedObra = async () => {
     try {
+      // Only proceed if we have a user
+      if (!authStore.user?.id) {
+        selectedObra.value = null
+        return
+      }
+
       const { data: obraSelecionada, error } = await supabase
         .from('obra_selecionada')
         .select('*, obras(*)')
-        .eq('usuario_id', authStore.user?.id)
+        .eq('usuario_id', authStore.user.id)
         .single()
 
       if (error && error.code !== 'PGRST116') throw error
@@ -26,12 +32,17 @@ export function useSelectedObra() {
 
   const handleObraSelection = async (obra) => {
     try {
+      if (!authStore.user?.id) {
+        console.error('No authenticated user found')
+        return
+      }
+
       if (!obra) {
         // If no obra is selected, delete the current selection
         const { error: deleteError } = await supabase
           .from('obra_selecionada')
           .delete()
-          .eq('usuario_id', authStore.user?.id)
+          .eq('usuario_id', authStore.user.id)
 
         if (deleteError) throw deleteError
         selectedObra.value = null
@@ -42,7 +53,7 @@ export function useSelectedObra() {
       const { error: upsertError } = await supabase
         .from('obra_selecionada')
         .upsert({
-          usuario_id: authStore.user?.id,
+          usuario_id: authStore.user.id,
           obra_id: obra.id
         })
 
@@ -54,6 +65,15 @@ export function useSelectedObra() {
       await loadSelectedObra()
     }
   }
+
+  // Watch for changes in the auth user
+  watch(() => authStore.user, (newUser) => {
+    if (newUser) {
+      loadSelectedObra()
+    } else {
+      selectedObra.value = null
+    }
+  }, { immediate: true }) // immediate: true ensures it runs on component mount
 
   return {
     selectedObra,

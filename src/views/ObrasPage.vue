@@ -487,10 +487,10 @@ const onSubmitNewObra = async () => {
     const { data: obra, error: obraError } = await supabase
       .from('obras')
       .insert([{
-        codigo: newObra.codigo,
-        nome: newObra.nome,
-        estado: newObra.estado,
-        cidade: newObra.cidade,
+        codigo: newObra.value.codigo,
+        nome: newObra.value.nome,
+        estado: newObra.value.estado,
+        cidade: newObra.value.cidade,
         usuario_cadastro: authStore.user.user_metadata.display_name,
         data_cadastro: new Date().toISOString()
       }])
@@ -508,10 +508,10 @@ const onSubmitNewObra = async () => {
     })
 
     // Reset form
-    newObra.codigo = ''
-    newObra.nome = ''
-    newObra.estado = null
-    newObra.cidade = null
+    newObra.value.codigo = ''
+    newObra.value.nome = ''
+    newObra.value.estado = null
+    newObra.value.cidade = null
   } catch (error) {
     console.error('Erro ao cadastrar obra:', error)
     $q.notify({
