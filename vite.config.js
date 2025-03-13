@@ -41,6 +41,15 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  server: {
+    port: 5174,
+    host: true,
+    strictPort: true,
+    hmr: {
+      protocol: 'ws',
+      host: 'localhost'
+    }
+  },
   build: {
     target: 'esnext', // Permite top-level await
     outDir: 'dist',

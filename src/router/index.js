@@ -44,7 +44,7 @@ const routes = [
       {
         path: 'ensaios/terraplenagem/compactacao-aterro',
         name: 'ensaios-compactacao-aterro',
-        component: () => import('@/views/EnsaiosCompactacaoAterroPage.vue'),
+        component: () => import('@/views/CompactacaoAterroPage.vue'),
         meta: { requiresAuth: true }
       },
       {
@@ -227,6 +227,24 @@ const routes = [
         path: '/obras/:obraId/medicoes/:medicaoId/servicos',
         name: 'medicao-servicos',
         component: () => import('@/views/MedicaoServicosPage.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'apontamentos',
+        name: 'apontamentos',
+        component: () => import('@/views/ApontamentoViagemPage.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'apontamentos/dia-produtivo/:id',
+        name: 'dia-produtivo',
+        component: () => import('@/views/DiaProdutivoPage.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'apontamentos/dia-produtivo/:diaProdutivoId/origem/:origemId/producao',
+        name: 'producao',
+        component: () => import('@/views/ProducaoPage.vue'),
         meta: { requiresAuth: true }
       }
     ]

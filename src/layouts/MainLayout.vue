@@ -113,6 +113,15 @@
             </q-item-section>
           </q-item>
 
+          <q-item to="/apontamentos" exact clickable v-ripple class="q-mb-sm">
+            <q-item-section avatar>
+              <q-icon name="local_shipping" color="primary" size="md" />
+            </q-item-section>
+            <q-item-section>
+              <q-item-label class="text-weight-medium">Apontamento de Viagens</q-item-label>
+            </q-item-section>
+          </q-item>
+
           <q-item to="/obras" exact clickable v-ripple class="q-mb-sm">
             <q-item-section avatar>
               <q-icon name="business" color="primary" size="md" />
