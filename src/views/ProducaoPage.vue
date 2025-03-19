@@ -7,7 +7,7 @@
           <div>
             <h5 class="q-my-none">Registrar Produção</h5>
             <div class="text-subtitle2 text-grey-7">
-              {{ origem?.nome }} - {{ origem?.material }}
+              {{ origem?.escavadeira }} / {{ origem?.nome }} / {{ origem?.material }} / {{ origem?.disciplina }}
             </div>
           </div>
         </div>
@@ -42,58 +42,106 @@
         <q-list v-else separator>
           <q-item v-for="caminhao in caminhoes" :key="caminhao.id">
             <q-item-section>
-              <div class="row items-center">
-                <q-icon name="local_shipping" size="sm" class="q-mr-sm" />
-                <div>
+              <!-- Restructured layout with header, content, and footer -->
+              <div class="column full-width">
+                <!-- Header with truck info -->
+                <div class="row items-center q-mb-md">
+                  <q-icon name="local_shipping" size="sm" class="q-mr-sm" />
                   <div class="text-weight-medium">{{ caminhao.prefixo }}</div>
-                  <div class="text-caption">{{ caminhao.motorista }}</div>
-                  <div class="text-h6 text-primary q-mt-sm">
+                  <div class="text-caption q-ml-sm">{{ caminhao.placa }}</div>
+                </div>
+                
+                <!-- Main content with inputs -->
+                <div class="row q-col-gutter-sm">
+                  <div class="col-12 col-sm-6">
+                    <q-input
+                      v-model="caminhao.estaca_origem"
+                      label="Origem"
+                      dense
+                      outlined
+                      :disable="caminhao.loading"
+                      :hint="caminhao.ultima_origem ? `Último: ${caminhao.ultima_origem}` : ''"
+                    />
+                  </div>
+                  <div class="col-12 col-sm-6">
+                    <q-input
+                      v-model="caminhao.estaca_destino"
+                      label="Destino"
+                      dense
+                      outlined
+                      :disable="caminhao.loading"
+                    />
+                  </div>
+                  
+                  <!-- Campos complementares -->
+                  <template v-if="origem.camposComplementares">
+                    <div class="col-12 col-sm-6 q-mt-sm">
+                      <q-input
+                        v-model="caminhao.numero_nf"
+                        label="Número NF"
+                        dense
+                        outlined
+                        :disable="caminhao.loading"
+                      />
+                    </div>
+                    <div class="col-12 col-sm-6 q-mt-sm">
+                      <q-input
+                        v-model="caminhao.peso"
+                        type="number"
+                        label="Peso (ton)"
+                        dense
+                        outlined
+                        :disable="caminhao.loading"
+                        step="0.01"
+                      />
+                    </div>
+                    <div class="col-12 col-sm-6 q-mt-sm">
+                      <q-input
+                        v-model="caminhao.comprimento_pista"
+                        type="number"
+                        label="Comprimento (m)"
+                        dense
+                        outlined
+                        :disable="caminhao.loading"
+                        step="0.1"
+                      />
+                    </div>
+                    <div class="col-12 col-sm-6 q-mt-sm">
+                      <q-input
+                        v-model="caminhao.largura_pista"
+                        type="number"
+                        label="Largura (m)"
+                        dense
+                        outlined
+                        :disable="caminhao.loading"
+                        step="0.1"
+                      />
+                    </div>
+                  </template>
+                </div>
+                
+                <!-- Footer with trip count and actions -->
+                <div class="row justify-between items-center q-mt-md">
+                  <div class="text-h6 text-primary">
                     {{ caminhao.viagens || 0 }} viagens
                   </div>
+                  <div class="row items-center q-gutter-sm">
+                    <q-btn flat round color="primary" icon="visibility" size="sm" 
+                      @click="verViagens(caminhao)"
+                      :disable="!caminhao.viagens"
+                    >
+                      <q-tooltip>Ver Viagens</q-tooltip>
+                    </q-btn>
+                    <q-btn round color="positive" icon="add" size="sm" 
+                      class="register-btn"
+                      @click="registrarViagem(caminhao)"
+                      :disable="!isValidViagem(caminhao)"
+                      :loading="caminhao.loading"
+                    >
+                      <q-tooltip>Registrar Viagem</q-tooltip>
+                    </q-btn>
+                  </div>
                 </div>
-              </div>
-            </q-item-section>
-
-            <q-item-section>
-              <div class="row q-col-gutter-sm">
-                <div class="col-12 col-sm-6">
-                  <q-input
-                    v-model="caminhao.estaca_origem"
-                    label="Origem"
-                    dense
-                    outlined
-                    :disable="caminhao.loading"
-                    :hint="caminhao.ultima_origem ? `Último: ${caminhao.ultima_origem}` : ''"
-                  />
-                </div>
-                <div class="col-12 col-sm-6">
-                  <q-input
-                    v-model="caminhao.estaca_destino"
-                    label="Destino"
-                    dense
-                    outlined
-                    :disable="caminhao.loading"
-                  />
-                </div>
-              </div>
-            </q-item-section>
-
-            <q-item-section side>
-              <div class="row items-center q-gutter-sm">
-                <q-btn flat round color="primary" icon="visibility" size="sm" 
-                  @click="verViagens(caminhao)"
-                  :disable="!caminhao.viagens"
-                >
-                  <q-tooltip>Ver Viagens</q-tooltip>
-                </q-btn>
-                <q-btn round color="positive" icon="add" size="sm" 
-                  class="register-btn"
-                  @click="registrarViagem(caminhao)"
-                  :disable="!isValidViagem(caminhao)"
-                  :loading="caminhao.loading"
-                >
-                  <q-tooltip>Registrar Viagem</q-tooltip>
-                </q-btn>
               </div>
             </q-item-section>
           </q-item>
@@ -115,11 +163,7 @@
         <q-card-section class="q-pa-none">
           <q-table
             :rows="viagensCaminhao"
-            :columns="[
-              { name: 'data_hora', label: 'Data/Hora', field: 'data_hora', sortable: true },
-              { name: 'origem', label: 'Origem', field: 'origem', sortable: true },
-              { name: 'destino', label: 'Destino', field: 'destino', sortable: true }
-            ]"
+            :columns="getTableColumns()"
             row-key="id"
             flat
             :pagination="{ rowsPerPage: 10 }"
@@ -131,6 +175,16 @@
                 </q-td>
                 <q-td key="origem" :props="props">{{ props.row.origem }}</q-td>
                 <q-td key="destino" :props="props">{{ props.row.destino }}</q-td>
+                <q-td v-if="origem.camposComplementares" key="numero_nf" :props="props">{{ props.row.numero_nf || '-' }}</q-td>
+                <q-td v-if="origem.camposComplementares" key="peso" :props="props">
+                  {{ props.row.peso ? `${Number(props.row.peso).toFixed(2)} ton` : '-' }}
+                </q-td>
+                <q-td v-if="origem.camposComplementares" key="comprimento_pista" :props="props">
+                  {{ props.row.comprimento_pista ? `${Number(props.row.comprimento_pista).toFixed(1)} m` : '-' }}
+                </q-td>
+                <q-td v-if="origem.camposComplementares" key="largura_pista" :props="props">
+                  {{ props.row.largura_pista ? `${Number(props.row.largura_pista).toFixed(1)} m` : '-' }}
+                </q-td>
               </q-tr>
             </template>
           </q-table>
@@ -177,7 +231,7 @@
                   <q-item-section>
                     <q-item-label>{{ opt.prefixo }}</q-item-label>
                     <q-item-label caption>
-                      Placa: {{ opt.placa }} | Motorista: {{ opt.motorista }}
+                      Placa: {{ opt.placa }}
                     </q-item-label>
                   </q-item-section>
                 </q-item>
@@ -261,15 +315,22 @@ const loadOrigem = async () => {
     loading.value = true
     await new Promise(resolve => setTimeout(resolve, 500))
     
+    // In a real implementation, this would come from the API or a store
+    // based on the route.params.origemId
+    // For now, we get values properly from DiaProdutivoPage query parameters
     origem.value = {
       id: route.params.origemId,
-      nome: 'Jazida 1',
-      descricao: 'Jazida principal de material',
-      material: 'Cascalho',
-      tipo: 'rodoviario',
-      dt_fixo: 2.5
+      nome: 'Jazida 1', // In a real app, we would fetch this from an API
+      escavadeira: route.query.escavadeira || '',
+      disciplina: route.query.disciplina || '',
+      descricao: 'Jazida principal de material', // This would come from the API
+      material: route.query.material || '',
+      tipo: 'rodoviario', // This would come from the API
+      dt_fixo: 2.5, // This would come from the API
+      // Read the camposComplementares flag from the route query
+      camposComplementares: route.query.campos_complementares === '1'
     }
-
+    
     // Carregar dados do cache
     const cachedData = loadCachedData()
 
@@ -281,6 +342,10 @@ const loadOrigem = async () => {
         motorista: 'João Silva',
         estaca_origem: '',
         estaca_destino: '',
+        numero_nf: '',
+        peso: null,
+        comprimento_pista: null,
+        largura_pista: null,
         viagens: cachedData['1']?.viagens || 3,
         ultima_origem: cachedData['1']?.ultima_origem || '',
         loading: false,
@@ -293,6 +358,10 @@ const loadOrigem = async () => {
         motorista: 'Pedro Santos',
         estaca_origem: '',
         estaca_destino: '',
+        numero_nf: '',
+        peso: null,
+        comprimento_pista: null,
+        largura_pista: null,
         viagens: cachedData['2']?.viagens || 5,
         ultima_origem: cachedData['2']?.ultima_origem || '',
         loading: false,
@@ -305,6 +374,10 @@ const loadOrigem = async () => {
         motorista: 'Carlos Oliveira',
         estaca_origem: '',
         estaca_destino: '',
+        numero_nf: '',
+        peso: null,
+        comprimento_pista: null,
+        largura_pista: null,
         viagens: cachedData['3']?.viagens || 2,
         ultima_origem: cachedData['3']?.ultima_origem || '',
         loading: false,
@@ -381,6 +454,10 @@ const onSubmit = async () => {
       ...selectedCaminhao.value,
       estaca_origem: '',
       estaca_destino: '',
+      numero_nf: '',
+      peso: null,
+      comprimento_pista: null,
+      largura_pista: null,
       viagens: 0,
       ultima_origem: '',
       loading: false
@@ -407,7 +484,17 @@ const onSubmit = async () => {
 }
 
 const isValidViagem = (caminhao) => {
-  return caminhao.estaca_origem && caminhao.estaca_destino && !caminhao.loading
+  // Base validation - origin and destination are always required
+  let isValid = caminhao.estaca_origem && caminhao.estaca_destino && !caminhao.loading;
+  
+  // Additional validation for complementary fields if enabled
+  if (isValid && origem.value.camposComplementares) {
+    // If we have complementary fields enabled, we need to check if NF is filled
+    // Other numeric fields can be optional
+    isValid = !!caminhao.numero_nf;
+  }
+  
+  return isValid;
 }
 
 const verViagens = (caminhao) => {
@@ -431,6 +518,14 @@ const registrarViagem = async (caminhao) => {
       destino: caminhao.estaca_destino
     }
 
+    // Adicionar campos complementares se habilitados
+    if (origem.value.camposComplementares) {
+      novaViagem.numero_nf = caminhao.numero_nf || '';
+      novaViagem.peso = caminhao.peso ? Number(caminhao.peso) : null;
+      novaViagem.comprimento_pista = caminhao.comprimento_pista ? Number(caminhao.comprimento_pista) : null;
+      novaViagem.largura_pista = caminhao.largura_pista ? Number(caminhao.largura_pista) : null;
+    }
+
     // Atualizar registros do caminhão
     if (!caminhao.registros) caminhao.registros = []
     caminhao.registros.unshift(novaViagem)
@@ -451,6 +546,14 @@ const registrarViagem = async (caminhao) => {
     // Limpar campos
     caminhao.estaca_destino = ''
     // Manter a origem preenchida com o último valor
+    
+    // Clear complementary fields if they are enabled
+    if (origem.value.camposComplementares) {
+      caminhao.numero_nf = ''
+      caminhao.peso = null
+      caminhao.comprimento_pista = null
+      caminhao.largura_pista = null
+    }
 
     $q.notify({
       message: 'Viagem registrada com sucesso!',
@@ -465,6 +568,26 @@ const registrarViagem = async (caminhao) => {
   } finally {
     caminhao.loading = false
   }
+}
+
+// Adicionar uma função para obter colunas dinamicamente com base nos campos complementares
+const getTableColumns = () => {
+  const columns = [
+    { name: 'data_hora', label: 'Data/Hora', field: 'data_hora', sortable: true },
+    { name: 'origem', label: 'Origem', field: 'origem', sortable: true },
+    { name: 'destino', label: 'Destino', field: 'destino', sortable: true }
+  ]
+  
+  if (origem.value?.camposComplementares) {
+    columns.push(
+      { name: 'numero_nf', label: 'NF', field: 'numero_nf', sortable: true },
+      { name: 'peso', label: 'Peso (ton)', field: 'peso', sortable: true },
+      { name: 'comprimento_pista', label: 'Comprimento (m)', field: 'comprimento_pista', sortable: true },
+      { name: 'largura_pista', label: 'Largura (m)', field: 'largura_pista', sortable: true }
+    )
+  }
+  
+  return columns
 }
 
 onMounted(() => {

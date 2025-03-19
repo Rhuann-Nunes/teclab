@@ -45,23 +45,31 @@
           <q-item v-for="origem in origens" :key="origem.id">
             <q-item-section>
               <q-item-label class="text-weight-medium">
+                <div class="text-primary text-weight-bold text-h6 q-mb-xs">
+                  <q-icon name="engineering" size="sm" class="q-mr-xs" />
+                  Escavadeira: {{ origem.escavadeira }}
+                </div>
                 <q-icon name="location_on" size="sm" class="q-mr-sm" />
                 {{ origem.nome }}
                 <q-badge :color="origem.tipo === 'rodoviario' ? 'primary' : 'secondary'" class="q-ml-sm">
                   {{ origem.tipo === 'rodoviario' ? 'Rodoviário' : 'Urbano' }}
                 </q-badge>
-              </q-item-label>
-              <q-item-label caption>
-                {{ origem.descricao }}
+                <q-badge :color="getDisciplinaColor(origem.disciplina)" class="q-ml-sm">
+                  {{ origem.disciplina }}
+                </q-badge>
               </q-item-label>
               <q-item-label caption class="text-grey-7">
-                Material: {{ origem.material }}
+                Serviço: {{ origem.material }}
               </q-item-label>
               <q-item-label caption class="text-grey-7">
                 DT Fixo: {{ formatDtFixo(origem.dt_fixo) }}
               </q-item-label>
               <q-item-label caption class="text-grey-7">
                 Cadastrado por {{ origem.usuario_cadastro }} em {{ new Date(origem.data_cadastro).toLocaleString() }}
+              </q-item-label>
+              <q-item-label v-if="origem.camposComplementares" caption class="text-positive">
+                <q-icon name="check_circle" size="xs" class="q-mr-xs" />
+                Campos complementares habilitados
               </q-item-label>
             </q-item-section>
             <q-item-section side>
@@ -97,6 +105,46 @@
         <q-card-section>
           <q-form @submit="onSubmit" class="q-gutter-md">
             <q-select
+              v-model="selectedEscavadeira"
+              :options="escavadeiras"
+              label="Selecionar Escavadeira"
+              outlined
+              :rules="[val => !!val || 'Campo obrigatório']"
+              ref="escavadeiraSelect"
+            >
+              <template v-slot:option="{ itemProps, opt }">
+                <q-item v-bind="itemProps">
+                  <q-item-section>
+                    <q-item-label>
+                      <q-icon name="engineering" size="sm" class="q-mr-sm" />
+                      {{ opt }}
+                    </q-item-label>
+                  </q-item-section>
+                </q-item>
+              </template>
+            </q-select>
+
+            <q-select
+              v-model="selectedDisciplina"
+              :options="disciplinas"
+              label="Selecionar Disciplina"
+              outlined
+              :rules="[val => !!val || 'Campo obrigatório']"
+              ref="disciplinaSelect"
+            >
+              <template v-slot:option="{ itemProps, opt }">
+                <q-item v-bind="itemProps">
+                  <q-item-section>
+                    <q-item-label>
+                      <q-icon name="category" size="sm" class="q-mr-sm" />
+                      {{ opt }}
+                    </q-item-label>
+                  </q-item-section>
+                </q-item>
+              </template>
+            </q-select>
+
+            <q-select
               v-model="selectedOrigem"
               :options="origensPreCadastradas"
               label="Selecionar Origem"
@@ -110,6 +158,7 @@
               map-options
               emit-value
               :display-value="selectedOrigem ? selectedOrigem.nome : ''"
+              @update:model-value="onOrigemChange"
             >
               <template v-slot:no-option>
                 <q-item>
@@ -128,22 +177,20 @@
                       </q-badge>
                     </q-item-label>
                     <q-item-label caption>{{ opt.descricao }}</q-item-label>
-                    <q-item-label caption class="text-grey-7">
-                      DT Fixo: {{ formatDtFixo(opt.dt_fixo) }}
-                    </q-item-label>
                   </q-item-section>
                 </q-item>
               </template>
             </q-select>
 
             <q-select
-              v-if="selectedOrigem"
               v-model="selectedMaterial"
-              :options="selectedOrigem.materiais"
-              label="Selecionar Material"
+              :options="servicos"
+              label="Selecionar Serviço"
               outlined
               :rules="[val => !!val || 'Campo obrigatório']"
               ref="materialSelect"
+              :disable="!selectedOrigem"
+              :hint="!selectedOrigem ? 'Selecione uma origem primeiro' : ''"
             >
               <template v-slot:option="{ itemProps, opt }">
                 <q-item v-bind="itemProps">
@@ -153,6 +200,33 @@
                 </q-item>
               </template>
             </q-select>
+
+            <q-input
+              v-model="dtFixo"
+              type="number"
+              label="DT Fixo (km)"
+              outlined
+              step="0.1"
+              min="0"
+              hint="Campo opcional. Deixe em branco para usar valor padrão (0 km)."
+            >
+              <template v-slot:append>
+                <q-icon name="directions_car" />
+              </template>
+            </q-input>
+
+            <q-toggle
+              v-model="camposComplementares"
+              label="Habilitar campos complementares"
+              color="primary"
+            >
+              <template v-slot:append>
+                <q-icon name="menu_open" class="q-ml-sm" />
+              </template>
+            </q-toggle>
+            <div v-if="camposComplementares" class="text-caption text-grey-7 q-mt-n3 q-pl-md q-mb-md">
+              Habilita campos para NF, peso, comprimento e largura da pista na tela de produção
+            </div>
 
             <div class="row justify-end q-gutter-sm">
               <q-btn label="Cancelar" color="negative" flat v-close-popup />
@@ -187,8 +261,40 @@ const saving = ref(false)
 const showDialog = ref(false)
 const selectedOrigem = ref(null)
 const selectedMaterial = ref(null)
+const selectedEscavadeira = ref(null)
+const selectedDisciplina = ref(null)
+const dtFixo = ref(null)
+const camposComplementares = ref(false)
+const servicos = ref([])
 const origemSelect = ref(null)
 const materialSelect = ref(null)
+const escavadeiraSelect = ref(null)
+const disciplinaSelect = ref(null)
+
+// Lista de escavadeiras por prefixo
+const escavadeiras = ref([
+  "6339", "6340", "6341", "6636", "6637", "6638", "6639", "6640"
+])
+
+// Lista de disciplinas
+const disciplinas = ref([
+  "Pavimentação", "Terraplenagem", "Obra de Arte Corrente", "Obra de Arte Especial", 
+  "Drenagem", "Obras Complementares", "Indireto"
+])
+
+// Função para retornar cor com base na disciplina
+const getDisciplinaColor = (disciplina) => {
+  const colors = {
+    "Pavimentação": "purple",
+    "Terraplenagem": "brown",
+    "Obra de Arte Corrente": "blue",
+    "Obra de Arte Especial": "deep-blue",
+    "Drenagem": "teal",
+    "Obras Complementares": "green",
+    "Indireto": "grey"
+  }
+  return colors[disciplina] || "grey"
+}
 
 // Dados mockados de origens pré-cadastradas
 const origensPreCadastradas = ref([
@@ -196,7 +302,7 @@ const origensPreCadastradas = ref([
     id: '1',
     nome: 'Jazida 1',
     descricao: 'Jazida principal de material',
-    materiais: ['Cascalho'],
+    materiais: ['Transporte de Cascalho'],
     tipo: 'rodoviario',
     dt_fixo: 2.5
   },
@@ -204,7 +310,7 @@ const origensPreCadastradas = ref([
     id: '2',
     nome: 'Jazida 2',
     descricao: 'Jazida secundária',
-    materiais: ['Cascalho'],
+    materiais: ['Transporte de Cascalho'],
     tipo: 'rodoviario',
     dt_fixo: 3.7
   },
@@ -212,7 +318,7 @@ const origensPreCadastradas = ref([
     id: '3',
     nome: 'Bota-fora',
     descricao: 'Local de descarte',
-    materiais: ['Material de Descarte'],
+    materiais: ['Transporte de Material de Descarte'],
     tipo: 'rodoviario',
     dt_fixo: 1.8
   },
@@ -220,7 +326,7 @@ const origensPreCadastradas = ref([
     id: '4',
     nome: 'Caixa de Empréstimo 1',
     descricao: 'Local de empréstimo principal',
-    materiais: ['Argila'],
+    materiais: ['Transporte de Argila'],
     tipo: 'urbana',
     dt_fixo: 4.2
   },
@@ -228,7 +334,7 @@ const origensPreCadastradas = ref([
     id: '5',
     nome: 'Caixa de Empréstimo 2',
     descricao: 'Local de empréstimo secundário',
-    materiais: ['Argila'],
+    materiais: ['Transporte de Argila'],
     tipo: 'urbana',
     dt_fixo: 5.1
   },
@@ -236,7 +342,7 @@ const origensPreCadastradas = ref([
     id: '6',
     nome: 'Caixa de Empréstimo 3',
     descricao: 'Local de empréstimo terciário',
-    materiais: ['Argila'],
+    materiais: ['Transporte de Argila'],
     tipo: 'urbana',
     dt_fixo: 6.3
   },
@@ -244,7 +350,7 @@ const origensPreCadastradas = ref([
     id: '7',
     nome: 'Usina ABC Asfaltos',
     descricao: 'Usina de asfalto',
-    materiais: ['CBUQ Faixa B', 'CBUQ Faixa C'],
+    materiais: ['Transporte de CBUQ Faixa B', 'Transporte de CBUQ Faixa C'],
     tipo: 'urbana',
     dt_fixo: 8.5
   }
@@ -282,7 +388,12 @@ const loadDiaProdutivo = async () => {
         id: '1',
         nome: 'Jazida 1',
         descricao: 'Jazida principal de material',
-        material: 'Cascalho',
+        material: 'Transporte de Cascalho',
+        escavadeira: '6339',
+        tipo: 'rodoviario',
+        disciplina: 'Terraplenagem',
+        dt_fixo: 2.5,
+        camposComplementares: true,
         dia_produtivo_id: route.params.id,
         usuario_cadastro: 'usuario@email.com',
         data_cadastro: '2024-03-20T10:00:00'
@@ -291,7 +402,12 @@ const loadDiaProdutivo = async () => {
         id: '2',
         nome: 'Jazida 2',
         descricao: 'Jazida secundária',
-        material: 'Cascalho',
+        material: 'Transporte de Cascalho',
+        escavadeira: '6340',
+        tipo: 'rodoviario',
+        disciplina: 'Pavimentação',
+        dt_fixo: 3.7,
+        camposComplementares: false,
         dia_produtivo_id: route.params.id,
         usuario_cadastro: 'usuario@email.com',
         data_cadastro: '2024-03-20T10:30:00'
@@ -314,13 +430,32 @@ const formatDate = (dateString) => {
   return format(date, 'dd/MM/yyyy', { locale: ptBR })
 }
 
+const onOrigemChange = (origId) => {
+  if (!origId) {
+    servicos.value = []
+    selectedMaterial.value = null
+    return
+  }
+  
+  const origem = origensPreCadastradas.value.find(o => o.id === origId)
+  if (origem) {
+    servicos.value = origem.materiais
+    selectedMaterial.value = null
+  }
+}
+
 const openDialog = () => {
   selectedOrigem.value = null
   selectedMaterial.value = null
+  selectedEscavadeira.value = null
+  selectedDisciplina.value = null
+  dtFixo.value = null
+  camposComplementares.value = false
+  servicos.value = []
   showDialog.value = true
   // Focar no primeiro select após o diálogo abrir
   nextTick(() => {
-    origemSelect.value?.focus()
+    escavadeiraSelect.value?.focus()
   })
 }
 
@@ -337,7 +472,7 @@ const filterOrigens = (val, update, abort) => {
 }
 
 const onSubmit = async () => {
-  if (!selectedOrigem.value || !selectedMaterial.value) return
+  if (!selectedOrigem.value || !selectedMaterial.value || !selectedEscavadeira.value || !selectedDisciplina.value) return
   
   try {
     saving.value = true
@@ -359,6 +494,10 @@ const onSubmit = async () => {
     const novaOrigem = {
       ...origemSelecionada,
       material: selectedMaterial.value,
+      escavadeira: selectedEscavadeira.value,
+      disciplina: selectedDisciplina.value,
+      dt_fixo: dtFixo.value !== null && !isNaN(dtFixo.value) ? Number(dtFixo.value) : 0,
+      camposComplementares: camposComplementares.value,
       dia_produtivo_id: route.params.id,
       usuario_cadastro: user.email,
       data_cadastro: new Date().toISOString()
@@ -375,6 +514,10 @@ const onSubmit = async () => {
     showDialog.value = false
     selectedOrigem.value = null
     selectedMaterial.value = null
+    selectedEscavadeira.value = null
+    selectedDisciplina.value = null
+    dtFixo.value = null
+    camposComplementares.value = false
   } catch (error) {
     console.error('Erro ao adicionar origem:', error)
     $q.notify({
@@ -425,13 +568,25 @@ const confirmDelete = (origem) => {
 }
 
 const navigateToProducao = (origem) => {
-  router.push(`/apontamentos/dia-produtivo/${diaProdutivo.value.id}/origem/${origem.id}/producao`)
+  router.push({
+    path: `/apontamentos/dia-produtivo/${diaProdutivo.value.id}/origem/${origem.id}/producao`,
+    query: {
+      campos_complementares: origem.camposComplementares ? '1' : '0',
+      escavadeira: origem.escavadeira,
+      disciplina: origem.disciplina,
+      material: origem.material
+    }
+  })
 }
 
 const onDialogHide = () => {
   // Limpar seleções quando o diálogo for fechado
   selectedOrigem.value = null
   selectedMaterial.value = null
+  selectedEscavadeira.value = null
+  selectedDisciplina.value = null
+  dtFixo.value = null
+  camposComplementares.value = false
 }
 
 const formatDtFixo = (value) => {
